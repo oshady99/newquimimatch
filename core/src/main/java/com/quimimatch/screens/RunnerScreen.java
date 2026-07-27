@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import com.quimimatch.managers.ReactionManager;
 
 public class RunnerScreen implements Screen {
 
@@ -97,6 +98,7 @@ public class RunnerScreen implements Screen {
     // hay que juntar durante los 14s del runner.
     private static final int RUNNER_REPEAT_FACTOR = 3;
     private EquationUtil.RunnerTarget equationTarget;
+    private ReactionManager reactionManager;
     private boolean reactionComplete = false;
     private float reactionCelebrateT = 0f;
 
@@ -154,12 +156,17 @@ public class RunnerScreen implements Screen {
         // Niveles pares (0,2...) = Composición ("arma la ecuación").
         // Niveles impares (1,3...) = Descomposición.
         // NOTA: hoy ambos modos comparten la misma mecánica de recolección;
-        // la distinción visual/de reglas propia de Descomposición queda
+        // la distinción visual/de reglas propia de Descomposición queda PENDIENDTE
         // pendiente para la siguiente sesión (ver comentario en drawHUD).
         int levelIdx = GameSession.get().getCurrentLevel();
         boolean decomposeMode = (levelIdx % 2 == 1);
         equationTarget = EquationUtil.fromLevelConfig(
-            GameSession.get().getConfig(), decomposeMode, RUNNER_REPEAT_FACTOR);
+            GameSession.get().getConfig(),
+            decomposeMode,
+            RUNNER_REPEAT_FACTOR
+        );
+        reactionManager = new ReactionManager(equationTarget);
+
 
         // D-Pad lado IZQUIERDO
         dpadCX = 220f;
