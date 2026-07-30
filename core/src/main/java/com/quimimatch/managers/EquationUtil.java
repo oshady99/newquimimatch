@@ -81,4 +81,37 @@ public class EquationUtil {
 
         return new RunnerTarget(cfg.goalAtoms, coeffs, needed, cfg.moleculeName, decompose);
     }
+
+    /**
+     * Construye el objetivo del Runner a partir
+     * de un compuesto especial del catálogo.
+     */
+    public static RunnerTarget fromCompound(
+        Compound compound,
+        boolean decompose,
+        int repeatFactor
+    ) {
+        if (compound == null) {
+            throw new IllegalArgumentException(
+                "El compuesto no puede ser null."
+            );
+        }
+
+        AtomType[] atoms = compound.getAtoms();
+        int[] baseCounts = compound.getAtomCounts();
+
+        int[] neededCounts = new int[baseCounts.length];
+
+        for (int i = 0; i < baseCounts.length; i++) {
+            neededCounts[i] = baseCounts[i] * repeatFactor;
+        }
+
+        return new RunnerTarget(
+            atoms,
+            baseCounts,
+            neededCounts,
+            compound.getFormula(),
+            decompose
+        );
+    }
 }

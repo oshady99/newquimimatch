@@ -15,6 +15,8 @@ import com.quimimatch.managers.AssetLoader;
 import com.quimimatch.managers.AudioManager;
 import com.quimimatch.managers.EquationUtil;
 import com.quimimatch.managers.PlayerInventory;
+import com.quimimatch.managers.Compound;
+import com.quimimatch.managers.CompoundDatabase;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.Animation;
@@ -25,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import com.quimimatch.managers.ReactionManager;
+
 
 public class RunnerScreen implements Screen {
 
@@ -160,11 +163,27 @@ public class RunnerScreen implements Screen {
         // pendiente para la siguiente sesión (ver comentario en drawHUD).
         int levelIdx = GameSession.get().getCurrentLevel();
         boolean decomposeMode = (levelIdx % 2 == 1);
-        equationTarget = EquationUtil.fromLevelConfig(
-            GameSession.get().getConfig(),
-            decomposeMode,
-            RUNNER_REPEAT_FACTOR
+        Compound specialCompound = CompoundDatabase.getForLevel(
+            GameSession.get().getCurrentWorld(),
+            GameSession.get().getCurrentLevel()
         );
+
+        if (specialCompound != null) {
+            // Los compuestos reales ya tienen cantidades grandes.
+            // No usamos RUNNER_REPEAT_FACTOR para evitar triplicarlas.
+            equationTarget = EquationUtil.fromCompound(
+                specialCompound,
+                decomposeMode,
+                1
+            );
+        } else {
+            equationTarget = EquationUtil.fromLevelConfig(
+                GameSession.get().getConfig(),
+                decomposeMode,
+                RUNNER_REPEAT_FACTOR
+            );
+        }
+
         reactionManager = new ReactionManager(equationTarget);
 
 
@@ -297,6 +316,41 @@ public class RunnerScreen implements Screen {
         }
     }
 
+    private void spawnObject() {
+
+        int lane = random.nextInt(3);
+        float z = 0.95f;
+
+        if (random.nextFloat() < 0.65f) {
+
+            AtomType[] availableAtoms;
+
+            if (CompoundDatabase.isSpecialLevel(
+                GameSession.get().getCurrentWorld(),
+                GameSession.get().getCurrentLevel())) {
+
+                availableAtoms = equationTarget.atoms;
+
+            } else {
+
+                LevelConfig cfg = GameSession.get().getConfig();
+                availableAtoms = cfg.atoms;
+            }
+
+            AtomType atom =
+                availableAtoms[random.nextInt(availableAtoms.length)];
+
+            objects.add(new Obj3D(z, lane, atom));
+
+        } else {
+
+            objects.add(new Obj3D(
+                z,
+                lane,
+                random.nextBoolean()
+            ));
+        }
+    }
     private void readDpad() {
         btnUp = false; btnDown = false; btnLeft = false; btnRight = false;
         for (int p = 0; p < 5; p++) {
@@ -317,21 +371,7 @@ public class RunnerScreen implements Screen {
         }
     }
 
-    private void spawnObject() {
-        int l = random.nextInt(3);
-        float z = 0.95f;
 
-        // Mayor probabilidad de átomos y mejor alternancia
-        if (random.nextFloat() < 0.65f) {
-            // Colectable (Átomo)
-            LevelConfig cfg = GameSession.get().getConfig();
-            AtomType type = cfg.atoms[random.nextInt(cfg.atoms.length)];
-            objects.add(new Obj3D(z, l, type));
-        } else {
-            // Obstáculo (Alternando alto/bajo)
-            objects.add(new Obj3D(z, l, random.nextBoolean()));
-        }
-    }
 
     // ── DIBUJO ESCENA 3D ─────────────────────────────────────────
 
