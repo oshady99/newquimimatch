@@ -102,6 +102,8 @@ public class RunnerScreen implements Screen {
     private static final int RUNNER_REPEAT_FACTOR = 3;
     private EquationUtil.RunnerTarget equationTarget;
     private ReactionManager reactionManager;
+    private Compound specialCompound;
+    private MissionIntroOverlay missionIntro;
     private boolean reactionComplete = false;
     private float reactionCelebrateT = 0f;
 
@@ -117,8 +119,8 @@ public class RunnerScreen implements Screen {
     private float stateTime = 0f;
 
     // ── Estado ───────────────────────────────────────────────────
-    private enum State { RUNNING, SUMMARY }
-    private State state = State.RUNNING;
+    private enum State {INTRO, RUNNING, SUMMARY }
+    private State state = State.INTRO;
     private float summaryTimer = 4f;
 
     // Byte animación
@@ -163,20 +165,22 @@ public class RunnerScreen implements Screen {
         // pendiente para la siguiente sesión (ver comentario en drawHUD).
         int levelIdx = GameSession.get().getCurrentLevel();
         boolean decomposeMode = (levelIdx % 2 == 1);
-        Compound specialCompound = CompoundDatabase.getForLevel(
+
+        specialCompound = CompoundDatabase.getForLevel(
             GameSession.get().getCurrentWorld(),
             GameSession.get().getCurrentLevel()
         );
 
         if (specialCompound != null) {
-            // Los compuestos reales ya tienen cantidades grandes.
-            // No usamos RUNNER_REPEAT_FACTOR para evitar triplicarlas.
+
             equationTarget = EquationUtil.fromCompound(
                 specialCompound,
                 decomposeMode,
                 1
             );
+
         } else {
+
             equationTarget = EquationUtil.fromLevelConfig(
                 GameSession.get().getConfig(),
                 decomposeMode,
@@ -185,6 +189,7 @@ public class RunnerScreen implements Screen {
         }
 
         reactionManager = new ReactionManager(equationTarget);
+        missionIntro = new MissionIntroOverlay(specialCompound);
 
 
         // D-Pad lado IZQUIERDO
@@ -197,16 +202,41 @@ public class RunnerScreen implements Screen {
     @Override
     public void render(float delta) {
         stateTime += delta;
+
         Gdx.gl.glClearColor(0.05f, 0.08f, 0.22f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        if (state == State.RUNNING) {
+        if (state == State.INTRO) {
+
+            drawScene();
+
+            missionIntro.update(delta);
+
+            missionIntro.draw(
+                game.batch,
+                sr,
+                font,
+                fontBig,
+                fontSmall,
+                layout,
+                SW,
+                SH
+            );
+
+            if (missionIntro.isFinished()) {
+                state = State.RUNNING;
+            }
+
+        } else if (state == State.RUNNING) {
+
             updateRunner(delta);
             drawScene();
             drawHUD();
             drawDpad();
             drawFloatTexts(delta);
+
         } else {
+
             drawScene();
             updateConfetti(delta);
             drawConfetti();
