@@ -147,24 +147,29 @@ public class RunnerScreen implements Screen {
 
     public RunnerScreen(QuimiMatchGame game) {
         this.game = game;
+
         SW = Gdx.graphics.getWidth();
         SH = Gdx.graphics.getHeight();
 
-        sr        = new ShapeRenderer();
-        font      = new BitmapFont(); font.getData().setScale(2.8f); // Aumentado de 1.8
-        fontBig   = new BitmapFont(); fontBig.getData().setScale(4.5f); // Aumentado de 2.5
-        fontSmall = new BitmapFont(); fontSmall.getData().setScale(2.2f); // Aumentado de 1.4
-        layout    = new GlyphLayout();
-        AudioManager.get().startWorldMusic(GameSession.get().getConfig().world);
+        sr = new ShapeRenderer();
 
-        // Alternamos Composición / Descomposición según el nivel.
-        // Niveles pares (0,2...) = Composición ("arma la ecuación").
-        // Niveles impares (1,3...) = Descomposición.
-        // NOTA: hoy ambos modos comparten la misma mecánica de recolección;
-        // la distinción visual/de reglas propia de Descomposición queda PENDIENDTE
-        // pendiente para la siguiente sesión (ver comentario en drawHUD).
+        font = new BitmapFont();
+        font.getData().setScale(2.8f);
+
+        fontBig = new BitmapFont();
+        fontBig.getData().setScale(4.5f);
+
+        fontSmall = new BitmapFont();
+        fontSmall.getData().setScale(2.2f);
+
+        layout = new GlyphLayout();
+
+        AudioManager.get().startWorldMusic(
+            GameSession.get().getConfig().world
+        );
+
         int levelIdx = GameSession.get().getCurrentLevel();
-        boolean decomposeMode = (levelIdx % 2 == 1);
+        boolean decomposeMode = levelIdx % 2 == 1;
 
         specialCompound = CompoundDatabase.getForLevel(
             GameSession.get().getCurrentWorld(),
@@ -172,15 +177,12 @@ public class RunnerScreen implements Screen {
         );
 
         if (specialCompound != null) {
-
             equationTarget = EquationUtil.fromCompound(
                 specialCompound,
                 decomposeMode,
                 1
             );
-
         } else {
-
             equationTarget = EquationUtil.fromLevelConfig(
                 GameSession.get().getConfig(),
                 decomposeMode,
@@ -191,12 +193,9 @@ public class RunnerScreen implements Screen {
         reactionManager = new ReactionManager(equationTarget);
         missionIntro = new MissionIntroOverlay(specialCompound);
 
-
-        // D-Pad lado IZQUIERDO
         dpadCX = 220f;
         dpadCY = 200f;
     }
-
     @Override public void show() {}
 
     @Override
@@ -207,7 +206,6 @@ public class RunnerScreen implements Screen {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         if (state == State.INTRO) {
-
             drawScene();
 
             missionIntro.update(delta);
@@ -228,7 +226,6 @@ public class RunnerScreen implements Screen {
             }
 
         } else if (state == State.RUNNING) {
-
             updateRunner(delta);
             drawScene();
             drawHUD();
@@ -236,7 +233,6 @@ public class RunnerScreen implements Screen {
             drawFloatTexts(delta);
 
         } else {
-
             drawScene();
             updateConfetti(delta);
             drawConfetti();
@@ -589,43 +585,185 @@ public class RunnerScreen implements Screen {
     // ── HUD ──────────────────────────────────────────────────────
 
     private void drawHUD() {
-        float progress = Math.min(runTimer / RUN_DURATION, 1f);
+        float timeProgress = Math.min(runTimer / RUN_DURATION, 1f);
+
+        // ── Medidas del panel superior ───────────────────────────────
+
+        float panelWidth = SW * 0.66f;
+        float panelHeight = 155f;
+
+        float panelX = (SW - panelWidth) / 2f;
+        float panelY = SH - panelHeight - 12f;
+
+        // ── Fondo del HUD ────────────────────────────────────────────
 
         sr.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Barra progreso superior
-        sr.setColor(0.15f, 0.15f, 0.30f, 0.85f);
-        sr.rect(0, SH - 48, SW, 48);
-        sr.setColor(0.25f, 0.75f, 1f, 1f);
-        sr.rect(0, SH - 48, SW * progress, 48);
+        // Sombra suave.
+        sr.setColor(0f, 0f, 0f, 0.35f);
+        sr.rect(
+            panelX + 8f,
+            panelY - 8f,
+            panelWidth,
+            panelHeight
+        );
 
-        // Panel de la ecuación (debajo de la barra de progreso)
-        sr.setColor(0.08f, 0.10f, 0.22f, 0.85f);
-        sr.rect(0, SH - 48 - 90, SW, 90);
+        // Panel central.
+        sr.setColor(0.025f, 0.07f, 0.16f, 0.92f);
+        sr.rect(
+            panelX,
+            panelY,
+            panelWidth,
+            panelHeight
+        );
+
+        // Borde superior.
+        sr.setColor(0.10f, 0.80f, 1f, 1f);
+        sr.rect(
+            panelX,
+            panelY + panelHeight - 5f,
+            panelWidth,
+            5f
+        );
+
+        // Borde inferior.
+        sr.rect(
+            panelX,
+            panelY,
+            panelWidth,
+            4f
+        );
+
+        // Barra de tiempo integrada dentro del panel.
+        float progressX = panelX + 18f;
+        float progressY = panelY + panelHeight - 15f;
+        float progressWidth = panelWidth - 36f;
+
+        sr.setColor(0.10f, 0.17f, 0.28f, 1f);
+        sr.rect(
+            progressX,
+            progressY,
+            progressWidth,
+            5f
+        );
+
+        sr.setColor(0.15f, 0.85f, 1f, 1f);
+        sr.rect(
+            progressX,
+            progressY,
+            progressWidth * timeProgress,
+            5f
+        );
+
+        // Línea separadora antes de los contadores.
+        sr.setColor(0.18f, 0.55f, 0.75f, 0.65f);
+        sr.rect(
+            panelX + 25f,
+            panelY + 47f,
+            panelWidth - 50f,
+            2f
+        );
+
         sr.end();
+
+        // ── Textos del HUD ───────────────────────────────────────────
 
         game.batch.begin();
 
-        // Texto barra
-        fontSmall.setColor(Color.WHITE);
-        fontSmall.draw(game.batch, "CORRIENDO...", 20, SH - 14);
+        float centerX = SW / 2f;
 
-        // Ecuación objetivo (modo composición/descomposición)
-        String eqLabel = equationTarget.decompose ? "DESCOMPON:" : "ARMA:";
-        fontSmall.setColor(reactionComplete ? new Color(0.4f, 1f, 0.5f, 1f) : Color.WHITE);
-        drawC(fontSmall, eqLabel + "  " + equationTarget.equationString(), SW / 2f, SH - 48 - 34);
+        if (specialCompound != null) {
 
-        // Progreso por átomo objetivo (ej. "H 4/6   O 1/3")
-        StringBuilder progressStr = new StringBuilder();
-        for (int i = 0; i < equationTarget.atoms.length; i++) {
-            AtomType at = equationTarget.atoms[i];
-            int have = collected.getOrDefault(at, 0);
-            int need = equationTarget.neededCounts[i];
-            if (i > 0) progressStr.append("   ");
-            progressStr.append(at.getSymbol()).append(" ").append(Math.min(have, need)).append("/").append(need);
+            // Relación con la vida cotidiana.
+            fontSmall.setColor(
+                new Color(1f, 0.78f, 0.20f, 1f)
+            );
+
+            drawC(
+                fontSmall,
+                specialCompound.getTheme().toUpperCase(),
+                centerX,
+                panelY + 125f
+            );
+
+            // Nombre químico.
+            font.setColor(Color.WHITE);
+
+            drawC(
+                font,
+                specialCompound.getName().toUpperCase(),
+                centerX,
+                panelY + 94f
+            );
+
+            // Fórmula.
+            fontSmall.setColor(
+                reactionComplete
+                    ? new Color(0.35f, 1f, 0.55f, 1f)
+                    : new Color(0.20f, 0.85f, 1f, 1f)
+            );
+
+            drawC(
+                fontSmall,
+                specialCompound.getFormula(),
+                centerX,
+                panelY + 66f
+            );
+
+        } else {
+
+            // Respaldo para niveles que no tengan compuesto especial.
+            String label = equationTarget.decompose
+                ? "DESCOMPON:"
+                : "ARMA:";
+
+            font.setColor(Color.WHITE);
+
+            drawC(
+                font,
+                label + " " + equationTarget.equationString(),
+                centerX,
+                panelY + 97f
+            );
         }
-        fontSmall.setColor(new Color(0.75f, 0.85f, 1f, 1f));
-        drawC(fontSmall, progressStr.toString(), SW / 2f, SH - 48 - 68);
+
+        // ── Contadores de átomos en una sola fila ───────────────────
+
+        int atomCount = equationTarget.atoms.length;
+
+        float counterStartX = panelX + 55f;
+        float counterAreaWidth = panelWidth - 110f;
+        float counterSpacing = counterAreaWidth / atomCount;
+        float counterY = panelY + 18f;
+
+        for (int i = 0; i < atomCount; i++) {
+
+            AtomType atom = equationTarget.atoms[i];
+
+            int have = collected.getOrDefault(atom, 0);
+            int need = equationTarget.neededCounts[i];
+
+            float atomX =
+                counterStartX
+                    + counterSpacing * i
+                    + counterSpacing / 2f;
+
+            String counterText =
+                atom.getSymbol()
+                    + "  "
+                    + Math.min(have, need)
+                    + "/"
+                    + need;
+
+            fontSmall.setColor(atom.getColor());
+
+            drawC(
+                fontSmall,
+                counterText,
+                atomX,
+                counterY
+            );
+        }
 
         game.batch.end();
     }
@@ -829,7 +967,7 @@ public class RunnerScreen implements Screen {
     @Override public void resize(int w, int h) { SW = w; SH = h; }
     @Override public void pause()  {}
     @Override public void resume() {}
-    @Override public void hide()   { dispose(); }
+    @Override public void hide()   {  }
 
     @Override
     public void dispose() {

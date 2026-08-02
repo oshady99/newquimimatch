@@ -317,7 +317,7 @@ public class WorldMapScreen implements Screen {
     @Override public void resize(int w, int h) {}
     @Override public void pause()  {}
     @Override public void resume() {}
-    @Override public void hide()   { dispose(); }
+    @Override public void hide()   {  }
 
     @Override
     public void dispose() {
