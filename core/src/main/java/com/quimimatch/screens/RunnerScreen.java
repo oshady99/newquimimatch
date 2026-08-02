@@ -244,6 +244,7 @@ public class RunnerScreen implements Screen {
 
     private void updateRunner(float delta) {
         runTimer  += delta;
+        reactionManager.update(delta);
 
         // La animación solo avanza si estamos cambiando de carril
         if (laneT < 1f) {
@@ -293,34 +294,128 @@ public class RunnerScreen implements Screen {
             // Colisión cuando está muy cerca
             if (!o.hit && o.z < 0.12f && o.lane == Math.round(curLaneF)) {
                 if (o.isAtom) {
+
                     o.hit = true;
-                    collected.put(o.atomType, collected.getOrDefault(o.atomType, 0) + 1);
-                    AudioManager.get().playCollect();
+
+                    ReactionManager.CollectionResult result =
+                        reactionManager.collectAtom(o.atomType);
+
+                    // Sincronizar el mapa que usa el HUD.
+                    collected.clear();
+                    collected.putAll(reactionManager.getCollected());
+
                     float[] sp = screenPos(o.lane, o.z);
-                    floatLabels.add("+" + o.atomType.getSymbol());
-                    floatPos.add(new float[]{ sp[0], sp[1] });
-                    floatLife.add(1.0f);
+
+                    switch (result.getType()) {
+
+                        case CORRECT:
+                            AudioManager.get().playCollect();
+
+                            floatLabels.add(
+                                "+" + o.atomType.getSymbol()
+                            );
+
+                            floatPos.add(
+                                new float[]{sp[0], sp[1]}
+                            );
+
+                            floatLife.add(1.0f);
+                            break;
+
+                        case COMPLETED:
+                            AudioManager.get().playCollect();
+
+                            reactionComplete = true;
+                            reactionCelebrateT = 2.5f;
+
+                            floatLabels.add(
+                                "¡MOLECULA COMPLETADA!"
+                            );
+
+                            floatPos.add(
+                                new float[]{
+                                    SW / 2f - 220f,
+                                    SH * 0.65f
+                                }
+                            );
+
+                            floatLife.add(2.0f);
+
+                            PlayerInventory.get().addCoins(25);
+                            break;
+
+                        case EXTRA:
+                            AudioManager.get().playObstacle();
+
+                            floatLabels.add(
+                                "¡ATOMO SOBRANTE! -5%"
+                            );
+
+                            floatPos.add(
+                                new float[]{sp[0], sp[1]}
+                            );
+
+                            floatLife.add(1.2f);
+                            break;
+
+                        case INCORRECT:
+                            AudioManager.get().playObstacle();
+
+                            floatLabels.add(
+                                "¡CONTAMINANTE! -15%"
+                            );
+
+                            floatPos.add(
+                                new float[]{sp[0], sp[1]}
+                            );
+
+                            floatLife.add(1.2f);
+                            break;
+
+                        case CONTAMINATED:
+                            AudioManager.get().playObstacle();
+
+                            floatLabels.add(
+                                "¡REACCION CONTAMINADA!"
+                            );
+
+                            floatPos.add(
+                                new float[]{
+                                    SW / 2f - 220f,
+                                    SH * 0.65f
+                                }
+                            );
+
+                            floatLife.add(2.0f);
+                            break;
+                    }
+
                     it.remove();
 
-                    // ¿Se completó la ecuación balanceada?
-                    if (!reactionComplete && equationTarget.isComplete(collected)) {
-                        reactionComplete = true;
-                        reactionCelebrateT = 2.5f;
-                        floatLabels.add("¡ECUACION BALANCEADA!");
-                        floatPos.add(new float[]{ SW / 2f - 220f, SH * 0.65f });
-                        floatLife.add(2.0f);
-                        PlayerInventory.get().addCoins(25); // bono por balancear correctamente
-                    }
                 } else {
-                    // Obstáculo — verificar si el jugador esquivó
-                    boolean evaded = (o.isHigh && crouching) || (!o.isHigh && jumping);
+
+                    // Obstáculo — verificar si el jugador esquivó.
+                    boolean evaded =
+                        (o.isHigh && crouching)
+                            || (!o.isHigh && jumping);
+
                     o.hit = true;
+
                     if (!evaded) {
                         AudioManager.get().playObstacle();
-                        GameSession.get().loseLife(); // Restar vida al chocar
+                        GameSession.get().loseLife();
+
                         floatLabels.add("¡VIDA -1!");
+
                         float[] sp = screenPos(o.lane, o.z);
-                        floatPos.add(new float[]{ sp[0], sp[1] + 60 });
+
+                        floatPos.add(
+                            new float[]{
+                                sp[0],
+                                sp[1] + 60
+                            }
+                        );
+
                         floatLife.add(1.0f);
                     }
                 }
@@ -343,39 +438,71 @@ public class RunnerScreen implements Screen {
     }
 
     private void spawnObject() {
+        int selectedLane = random.nextInt(3);
+        float depth = 0.95f;
 
-        int lane = random.nextInt(3);
-        float z = 0.95f;
+        // 70 % de probabilidad de generar un átomo.
+        if (random.nextFloat() < 0.70f) {
 
-        if (random.nextFloat() < 0.65f) {
+            AtomType selectedAtom;
 
-            AtomType[] availableAtoms;
+            // 75 % átomo necesario y 25 % contaminante.
+            if (random.nextFloat() < 0.75f) {
 
-            if (CompoundDatabase.isSpecialLevel(
-                GameSession.get().getCurrentWorld(),
-                GameSession.get().getCurrentLevel())) {
+                AtomType[] targetAtoms = equationTarget.atoms;
 
-                availableAtoms = equationTarget.atoms;
+                selectedAtom = targetAtoms[
+                    random.nextInt(targetAtoms.length)
+                    ];
 
             } else {
 
-                LevelConfig cfg = GameSession.get().getConfig();
-                availableAtoms = cfg.atoms;
+                selectedAtom = getRandomContaminant();
             }
 
-            AtomType atom =
-                availableAtoms[random.nextInt(availableAtoms.length)];
-
-            objects.add(new Obj3D(z, lane, atom));
+            objects.add(
+                new Obj3D(
+                    depth,
+                    selectedLane,
+                    selectedAtom
+                )
+            );
 
         } else {
 
-            objects.add(new Obj3D(
-                z,
-                lane,
-                random.nextBoolean()
-            ));
+            // 30 % de probabilidad de obstáculo.
+            objects.add(
+                new Obj3D(
+                    depth,
+                    selectedLane,
+                    random.nextBoolean()
+                )
+            );
         }
+    }
+
+    private AtomType getRandomContaminant() {
+        List<AtomType> contaminants = new ArrayList<>();
+
+        for (AtomType atom : AtomType.values()) {
+
+            if (!reactionManager.isTargetAtom(atom)) {
+                contaminants.add(atom);
+            }
+        }
+
+        // Respaldo de seguridad.
+        if (contaminants.isEmpty()) {
+            AtomType[] targetAtoms = equationTarget.atoms;
+
+            return targetAtoms[
+                random.nextInt(targetAtoms.length)
+                ];
+        }
+
+        return contaminants.get(
+            random.nextInt(contaminants.size())
+        );
     }
     private void readDpad() {
         btnUp = false; btnDown = false; btnLeft = false; btnRight = false;
@@ -585,31 +712,42 @@ public class RunnerScreen implements Screen {
     // ── HUD ──────────────────────────────────────────────────────
 
     private void drawHUD() {
-        float timeProgress = Math.min(runTimer / RUN_DURATION, 1f);
 
-        // ── Medidas del panel superior ───────────────────────────────
+        float remainingTime = Math.max(
+            0f,
+            RUN_DURATION - runTimer
+        );
 
-        float panelWidth = SW * 0.66f;
-        float panelHeight = 155f;
+        int purity = reactionManager.getPurity();
+        float purityProgress = reactionManager.getPurityProgress();
+
+        // ── Panel holográfico ────────────────────────────────────────
+
+        float panelWidth = SW * 0.68f;
+        float panelHeight = 158f;
 
         float panelX = (SW - panelWidth) / 2f;
-        float panelY = SH - panelHeight - 12f;
+        float panelY = SH - panelHeight - 10f;
 
-        // ── Fondo del HUD ────────────────────────────────────────────
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(
+            GL20.GL_SRC_ALPHA,
+            GL20.GL_ONE_MINUS_SRC_ALPHA
+        );
 
         sr.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Sombra suave.
-        sr.setColor(0f, 0f, 0f, 0.35f);
+        // Sombra muy ligera.
+        sr.setColor(0f, 0f, 0f, 0.15f);
         sr.rect(
-            panelX + 8f,
-            panelY - 8f,
+            panelX + 5f,
+            panelY - 5f,
             panelWidth,
             panelHeight
         );
 
-        // Panel central.
-        sr.setColor(0.025f, 0.07f, 0.16f, 0.92f);
+        // Panel transparente.
+        sr.setColor(0.015f, 0.06f, 0.14f, 0.42f);
         sr.rect(
             panelX,
             panelY,
@@ -617,155 +755,447 @@ public class RunnerScreen implements Screen {
             panelHeight
         );
 
-        // Borde superior.
-        sr.setColor(0.10f, 0.80f, 1f, 1f);
+        // Bordes holográficos.
+        sr.setColor(0.10f, 0.82f, 1f, 0.90f);
+
         sr.rect(
             panelX,
-            panelY + panelHeight - 5f,
+            panelY + panelHeight - 3f,
             panelWidth,
-            5f
+            3f
         );
 
-        // Borde inferior.
         sr.rect(
             panelX,
             panelY,
             panelWidth,
-            4f
-        );
-
-        // Barra de tiempo integrada dentro del panel.
-        float progressX = panelX + 18f;
-        float progressY = panelY + panelHeight - 15f;
-        float progressWidth = panelWidth - 36f;
-
-        sr.setColor(0.10f, 0.17f, 0.28f, 1f);
-        sr.rect(
-            progressX,
-            progressY,
-            progressWidth,
-            5f
-        );
-
-        sr.setColor(0.15f, 0.85f, 1f, 1f);
-        sr.rect(
-            progressX,
-            progressY,
-            progressWidth * timeProgress,
-            5f
-        );
-
-        // Línea separadora antes de los contadores.
-        sr.setColor(0.18f, 0.55f, 0.75f, 0.65f);
-        sr.rect(
-            panelX + 25f,
-            panelY + 47f,
-            panelWidth - 50f,
             2f
+        );
+
+        // Separador antes de los contadores.
+        sr.setColor(0.15f, 0.70f, 0.95f, 0.45f);
+
+        sr.rect(
+            panelX + 20f,
+            panelY + 62f,
+            panelWidth - 40f,
+            2f
+        );
+
+        // ── Barra de pureza ──────────────────────────────────────────
+
+        float purityBarX = panelX + 115f;
+        float purityBarY = panelY + 12f;
+        float purityBarWidth = panelWidth - 230f;
+        float purityBarHeight = 12f;
+
+        // Fondo de la barra.
+        sr.setColor(0.10f, 0.13f, 0.20f, 0.90f);
+        sr.rect(
+            purityBarX,
+            purityBarY,
+            purityBarWidth,
+            purityBarHeight
+        );
+
+        Color purityColor;
+
+        if (purity >= 75) {
+            purityColor = new Color(
+                0.20f,
+                0.90f,
+                0.55f,
+                1f
+            );
+        } else if (purity >= 50) {
+            purityColor = new Color(
+                1f,
+                0.80f,
+                0.15f,
+                1f
+            );
+        } else if (purity >= 25) {
+            purityColor = new Color(
+                1f,
+                0.45f,
+                0.10f,
+                1f
+            );
+        } else {
+            purityColor = new Color(
+                1f,
+                0.15f,
+                0.15f,
+                1f
+            );
+        }
+
+        sr.setColor(purityColor);
+
+        sr.rect(
+            purityBarX,
+            purityBarY,
+            purityBarWidth * purityProgress,
+            purityBarHeight
         );
 
         sr.end();
 
-        // ── Textos del HUD ───────────────────────────────────────────
+        // ── Escalas del HUD ──────────────────────────────────────────
+
+        float originalFontScale =
+            font.getData().scaleX;
+
+        float originalSmallScale =
+            fontSmall.getData().scaleX;
+
+        // Letras más grandes.
+        font.getData().setScale(1.80f);
+        fontSmall.getData().setScale(1.28f);
 
         game.batch.begin();
 
         float centerX = SW / 2f;
 
+        String theme;
+        String compoundName;
+        String formula;
+
         if (specialCompound != null) {
 
-            // Relación con la vida cotidiana.
-            fontSmall.setColor(
-                new Color(1f, 0.78f, 0.20f, 1f)
-            );
+            theme = specialCompound
+                .getTheme()
+                .toUpperCase();
 
-            drawC(
-                fontSmall,
-                specialCompound.getTheme().toUpperCase(),
-                centerX,
-                panelY + 125f
-            );
+            compoundName = specialCompound
+                .getName()
+                .toUpperCase();
 
-            // Nombre químico.
-            font.setColor(Color.WHITE);
-
-            drawC(
-                font,
-                specialCompound.getName().toUpperCase(),
-                centerX,
-                panelY + 94f
-            );
-
-            // Fórmula.
-            fontSmall.setColor(
-                reactionComplete
-                    ? new Color(0.35f, 1f, 0.55f, 1f)
-                    : new Color(0.20f, 0.85f, 1f, 1f)
-            );
-
-            drawC(
-                fontSmall,
-                specialCompound.getFormula(),
-                centerX,
-                panelY + 66f
-            );
+            formula = specialCompound.getFormula();
 
         } else {
 
-            // Respaldo para niveles que no tengan compuesto especial.
-            String label = equationTarget.decompose
-                ? "DESCOMPON:"
-                : "ARMA:";
+            theme = "EXPEDICION QUIMICA";
 
-            font.setColor(Color.WHITE);
+            compoundName =
+                equationTarget.moleculeName.toUpperCase();
 
-            drawC(
-                font,
-                label + " " + equationTarget.equationString(),
-                centerX,
-                panelY + 97f
-            );
+            formula =
+                equationTarget.equationString();
         }
 
-        // ── Contadores de átomos en una sola fila ───────────────────
+        // Tema cotidiano.
+        fontSmall.setColor(
+            new Color(1f, 0.79f, 0.22f, 1f)
+        );
 
-        int atomCount = equationTarget.atoms.length;
+        drawC(
+            fontSmall,
+            theme,
+            centerX,
+            panelY + 137f
+        );
 
-        float counterStartX = panelX + 55f;
-        float counterAreaWidth = panelWidth - 110f;
-        float counterSpacing = counterAreaWidth / atomCount;
-        float counterY = panelY + 18f;
+        // Nombre del compuesto.
+        font.setColor(Color.WHITE);
+
+        drawC(
+            font,
+            compoundName,
+            centerX,
+            panelY + 108f
+        );
+
+        // Fórmula molecular.
+        fontSmall.setColor(
+            reactionComplete
+                ? new Color(0.35f, 1f, 0.55f, 1f)
+                : new Color(0.20f, 0.90f, 1f, 1f)
+        );
+
+        drawC(
+            fontSmall,
+            formula,
+            centerX,
+            panelY + 80f
+        );
+
+        // Tiempo.
+        fontSmall.setColor(
+            remainingTime <= 4f
+                ? new Color(1f, 0.30f, 0.20f, 1f)
+                : Color.WHITE
+        );
+
+        String timerText =
+            String.format(
+                java.util.Locale.US,
+                "%02d s",
+                (int) Math.ceil(remainingTime)
+            );
+
+        layout.setText(
+            fontSmall,
+            timerText
+        );
+
+        fontSmall.draw(
+            game.batch,
+            timerText,
+            panelX + panelWidth
+                - layout.width
+                - 14f,
+            panelY + panelHeight - 12f
+        );
+
+        game.batch.end();
+
+        // ── Contadores de átomos ─────────────────────────────────────
+
+        int atomCount =
+            equationTarget.atoms.length;
+
+        float countersLeft =
+            panelX + 30f;
+
+        float countersWidth =
+            panelWidth - 60f;
+
+        float itemWidth =
+            countersWidth / atomCount;
+
+        float counterY =
+            panelY + 45f;
 
         for (int i = 0; i < atomCount; i++) {
 
-            AtomType atom = equationTarget.atoms[i];
+            AtomType atom =
+                equationTarget.atoms[i];
 
-            int have = collected.getOrDefault(atom, 0);
-            int need = equationTarget.neededCounts[i];
+            int have =
+                collected.getOrDefault(atom, 0);
 
-            float atomX =
-                counterStartX
-                    + counterSpacing * i
-                    + counterSpacing / 2f;
+            int need =
+                equationTarget.neededCounts[i];
+
+            float itemCenterX =
+                countersLeft
+                    + itemWidth * i
+                    + itemWidth / 2f;
+
+            Color atomColor =
+                getCpkColor(atom);
+
+            // Círculo CPK más grande.
+            sr.begin(ShapeRenderer.ShapeType.Filled);
+
+            sr.setColor(
+                0f,
+                0f,
+                0f,
+                0.38f
+            );
+
+            sr.circle(
+                itemCenterX - 38f + 2f,
+                counterY - 2f,
+                12f,
+                18
+            );
+
+            sr.setColor(atomColor);
+
+            sr.circle(
+                itemCenterX - 38f,
+                counterY,
+                11f,
+                18
+            );
+
+            sr.end();
+
+            game.batch.begin();
+
+            fontSmall.setColor(Color.WHITE);
 
             String counterText =
                 atom.getSymbol()
-                    + "  "
+                    + " "
                     + Math.min(have, need)
                     + "/"
                     + need;
 
-            fontSmall.setColor(atom.getColor());
-
-            drawC(
+            layout.setText(
                 fontSmall,
-                counterText,
-                atomX,
-                counterY
+                counterText
             );
+
+            fontSmall.draw(
+                game.batch,
+                counterText,
+                itemCenterX
+                    - layout.width / 2f
+                    + 10f,
+                counterY + 10f
+            );
+
+            game.batch.end();
         }
 
+        // ── Texto de pureza ──────────────────────────────────────────
+
+        game.batch.begin();
+
+        fontSmall.setColor(purityColor);
+
+        String purityText =
+            "PUREZA  " + purity + "%";
+
+        layout.setText(
+            fontSmall,
+            purityText
+        );
+
+        fontSmall.draw(
+            game.batch,
+            purityText,
+            panelX + 15f,
+            panelY + 24f
+        );
+
         game.batch.end();
+
+        // Restaurar escalas originales.
+        font.getData().setScale(
+            originalFontScale
+        );
+
+        fontSmall.getData().setScale(
+            originalSmallScale
+        );
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+    //getCPKColor
+    private Color getCpkColor(AtomType atom) {
+
+        switch (atom) {
+
+            case H:
+                return new Color(
+                    0.95f,
+                    0.95f,
+                    0.95f,
+                    1f
+                );
+
+            case C:
+                return new Color(
+                    0.22f,
+                    0.22f,
+                    0.22f,
+                    1f
+                );
+
+            case N:
+                return new Color(
+                    0.15f,
+                    0.35f,
+                    0.95f,
+                    1f
+                );
+
+            case O:
+                return new Color(
+                    0.95f,
+                    0.15f,
+                    0.15f,
+                    1f
+                );
+
+            case S:
+                return new Color(
+                    1f,
+                    0.90f,
+                    0.10f,
+                    1f
+                );
+
+            case P:
+                return new Color(
+                    1f,
+                    0.45f,
+                    0.10f,
+                    1f
+                );
+
+            case Cl:
+                return new Color(
+                    0.20f,
+                    0.85f,
+                    0.25f,
+                    1f
+                );
+
+            case Na:
+                return new Color(
+                    0.55f,
+                    0.20f,
+                    0.85f,
+                    1f
+                );
+
+            case Ca:
+                return new Color(
+                    0.45f,
+                    0.85f,
+                    0.35f,
+                    1f
+                );
+
+            case Mg:
+                return new Color(
+                    0.10f,
+                    0.75f,
+                    0.45f,
+                    1f
+                );
+
+            case Fe:
+                return new Color(
+                    0.65f,
+                    0.30f,
+                    0.15f,
+                    1f
+                );
+
+            case Cu:
+                return new Color(
+                    0.72f,
+                    0.45f,
+                    0.22f,
+                    1f
+                );
+
+            case Zn:
+                return new Color(
+                    0.55f,
+                    0.65f,
+                    0.72f,
+                    1f
+                );
+
+            case K:
+                return new Color(
+                    0.55f,
+                    0.20f,
+                    0.75f,
+                    1f
+                );
+
+            default:
+                return Color.WHITE;
+        }
     }
 
     // ── D-PAD IZQUIERDO ─────────────────────────────────────────
@@ -965,9 +1395,9 @@ public class RunnerScreen implements Screen {
     }
 
     @Override public void resize(int w, int h) { SW = w; SH = h; }
-    @Override public void pause()  {}
-    @Override public void resume() {}
-    @Override public void hide()   {  }
+    @Override public void pause()  { AudioManager.get().pauseMusic();}
+    @Override public void resume() { AudioManager.get().resumeMusic();}
+    @Override public void hide()   { AudioManager.get().pauseMusic();}
 
     @Override
     public void dispose() {

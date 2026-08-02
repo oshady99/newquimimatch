@@ -110,7 +110,7 @@ public class AudioManager {
         }
     }
 
-    public void pauseMusic()  { musicRunning = false; }
+    public void pauseMusic()  { muteMusic(); }
     public void resumeMusic() { if (currentWorld >= 0) startWorldMusic(currentWorld + 1); }
 
     public void setSoundEnabled(boolean v) { soundEnabled = v; }

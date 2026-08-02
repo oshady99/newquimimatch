@@ -781,9 +781,9 @@ public class Match3Screen implements Screen {
     }
 
     @Override public void resize(int w, int h) { recalcOffsets(w, h); snapAllTilesToGrid(); moleculePanel.resize(); }
-    @Override public void pause()  {}
-    @Override public void resume() {}
-    @Override public void hide()   { AudioManager.get().unmuteMusic(); dispose(); }
+    @Override public void pause()  { AudioManager.get().pauseMusic(); }
+    @Override public void resume() { AudioManager.get().resumeMusic(); }
+    @Override public void hide()   { AudioManager.get().pauseMusic();  }
 
     @Override
     public void dispose() {
