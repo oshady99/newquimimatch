@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import com.quimimatch.managers.ReactionManager;
+import com.quimimatch.managers.RunnerDifficulty;
 
 
 public class RunnerScreen implements Screen {
@@ -93,7 +94,48 @@ public class RunnerScreen implements Screen {
             size = 8f + (float)(Math.random() * 14);
         }
     }
+
+    //particulas class
+    private static class RunnerParticle {
+
+        float x;
+        float y;
+        float vx;
+        float vy;
+
+        float life;
+        float maxLife;
+
+        float size;
+
+        Color color;
+
+        RunnerParticle(
+            float x,
+            float y,
+            float vx,
+            float vy,
+            float life,
+            float size,
+            Color color) {
+
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+
+            this.life = life;
+            this.maxLife = life;
+
+            this.size = size;
+            this.color = color.cpy();
+        }
+    }
+
     private List<Confetti> confetti = new ArrayList<>();
+
+    private final List<RunnerParticle> runnerParticles =
+        new ArrayList<>();
     private boolean confettiLaunched = false;
 
     // ── Ecuación química objetivo (Fase 1 — La Fuga Nuclear) ─────
@@ -102,6 +144,7 @@ public class RunnerScreen implements Screen {
     private static final int RUNNER_REPEAT_FACTOR = 3;
     private EquationUtil.RunnerTarget equationTarget;
     private ReactionManager reactionManager;
+    private RunnerDifficulty difficulty;
     private Compound specialCompound;
     private MissionIntroOverlay missionIntro;
     private boolean reactionComplete = false;
@@ -189,6 +232,17 @@ public class RunnerScreen implements Screen {
                 RUNNER_REPEAT_FACTOR
             );
         }
+        difficulty = RunnerDifficulty.fromTarget(
+            equationTarget
+        );
+
+        reactionManager = new ReactionManager(
+            equationTarget
+        );
+
+        missionIntro = new MissionIntroOverlay(
+            specialCompound
+        );
 
         reactionManager = new ReactionManager(equationTarget);
         missionIntro = new MissionIntroOverlay(specialCompound);
@@ -228,6 +282,7 @@ public class RunnerScreen implements Screen {
         } else if (state == State.RUNNING) {
             updateRunner(delta);
             drawScene();
+            updateAndDrawRunnerParticles(delta);
             drawHUD();
             drawDpad();
             drawFloatTexts(delta);
@@ -310,20 +365,34 @@ public class RunnerScreen implements Screen {
 
                         case CORRECT:
                             AudioManager.get().playCollect();
+                            spawnRunnerParticles(
+                                sp[0],
+                                sp[1],
+                                getCpkColor(o.atomType),
+                                false
+                            );
 
                             floatLabels.add(
                                 "+" + o.atomType.getSymbol()
                             );
 
                             floatPos.add(
-                                new float[]{sp[0], sp[1]}
+                                new float[]{
+                                    sp[0],
+                                    sp[1] + 140f
+                                }
                             );
-
                             floatLife.add(1.0f);
                             break;
 
                         case COMPLETED:
                             AudioManager.get().playCollect();
+                            spawnRunnerParticles(
+                                sp[0],
+                                sp[1],
+                                getCpkColor(o.atomType),
+                                false
+                            );
 
                             reactionComplete = true;
                             reactionCelebrateT = 2.5f;
@@ -346,6 +415,17 @@ public class RunnerScreen implements Screen {
 
                         case EXTRA:
                             AudioManager.get().playObstacle();
+                            spawnRunnerParticles(
+                                sp[0],
+                                sp[1],
+                                new Color(
+                                    1f,
+                                    0.60f,
+                                    0.10f,
+                                    1f
+                                ),
+                                true
+                            );
 
                             floatLabels.add(
                                 "¡ATOMO SOBRANTE! -5%"
@@ -360,6 +440,17 @@ public class RunnerScreen implements Screen {
 
                         case INCORRECT:
                             AudioManager.get().playObstacle();
+                            spawnRunnerParticles(
+                                sp[0],
+                                sp[1],
+                                new Color(
+                                    0.35f,
+                                    1f,
+                                    0.25f,
+                                    1f
+                                ),
+                                true
+                            );
 
                             floatLabels.add(
                                 "¡CONTAMINANTE! -15%"
@@ -560,6 +651,8 @@ public class RunnerScreen implements Screen {
         float[] pos = screenPos(o.lane, o.z);
         float cx = pos[0], cy = pos[1];
         float scale = pos[2];
+        float atomScale =
+            Math.max(0.65f, scale * 2.0f);
 
         AssetLoader assets = AssetLoader.get();
 
@@ -567,13 +660,13 @@ public class RunnerScreen implements Screen {
             String sym = o.atomType.getSymbol();
             if (assets.hasAtom(sym)) {
                 game.batch.begin();
-                float size = 140f * scale; // Reducido más (era 180)
+                float size = 250f * atomScale;
                 game.batch.draw(assets.getAtom(sym), cx - size / 2f, cy - size / 2f, size, size);
                 game.batch.end();
             } else {
                 sr.begin(ShapeRenderer.ShapeType.Filled);
                 // Átomo colectable — círculo brillante
-                float r = 60f * scale; // Reducido más (era 80)
+                float r = 105f * scale; // Reducido más (era 80)
                 sr.setColor(0f, 0f, 0f, 0.4f);
                 sr.circle(cx + r * 0.15f, cy - r * 0.15f, r, 24);
                 sr.setColor(o.atomType.getColor());
@@ -1064,6 +1157,7 @@ public class RunnerScreen implements Screen {
         );
 
         game.batch.end();
+        drawByteMessage(panelX, panelY, panelWidth);
 
         // Restaurar escalas originales.
         font.getData().setScale(
@@ -1076,6 +1170,172 @@ public class RunnerScreen implements Screen {
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
+
+    //drawByteMessage()
+
+    private void drawByteMessage(
+        float hudPanelX,
+        float hudPanelY,
+        float hudPanelWidth
+    ) {
+        if (!reactionManager.shouldShowByteMessage()) {
+            return;
+        }
+
+        // ── Medidas del comunicador ──────────────────────────────────
+
+        float boxWidth = Math.min(430f, SW * 0.32f);
+        float boxHeight = 125f;
+
+        // Esquina superior derecha, debajo del HUD.
+        float boxX =
+            hudPanelX + hudPanelWidth - boxWidth;
+
+        float boxY =
+            hudPanelY - boxHeight - 12f;
+
+        // ── Fondo holográfico ────────────────────────────────────────
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(
+            GL20.GL_SRC_ALPHA,
+            GL20.GL_ONE_MINUS_SRC_ALPHA
+        );
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Sombra.
+        sr.setColor(0f, 0f, 0f, 0.25f);
+        sr.rect(
+            boxX + 5f,
+            boxY - 5f,
+            boxWidth,
+            boxHeight
+        );
+
+        // Panel transparente.
+        sr.setColor(
+            0.02f,
+            0.07f,
+            0.16f,
+            0.62f
+        );
+
+        sr.rect(
+            boxX,
+            boxY,
+            boxWidth,
+            boxHeight
+        );
+
+        // Línea holográfica superior.
+        sr.setColor(
+            0.12f,
+            0.85f,
+            1f,
+            0.95f
+        );
+
+        sr.rect(
+            boxX,
+            boxY + boxHeight - 4f,
+            boxWidth,
+            4f
+        );
+
+        // Indicador circular de Byte.
+        float indicatorX = boxX + 28f;
+        float indicatorY = boxY + boxHeight - 28f;
+
+        sr.setColor(
+            0f,
+            0f,
+            0f,
+            0.35f
+        );
+
+        sr.circle(
+            indicatorX + 2f,
+            indicatorY - 2f,
+            13f,
+            18
+        );
+
+        sr.setColor(
+            0.20f,
+            0.95f,
+            1f,
+            1f
+        );
+
+        sr.circle(
+            indicatorX,
+            indicatorY,
+            12f,
+            18
+        );
+
+        sr.end();
+
+        // ── Texto ────────────────────────────────────────────────────
+
+        float originalSmallScale =
+            fontSmall.getData().scaleX;
+
+        // Tamaño visible, pero suficientemente compacto para envolver texto.
+        fontSmall.getData().setScale(1.45f);
+
+        String message =
+            reactionManager.getByteMessage();
+
+        if (message == null) {
+            message = "";
+        }
+
+        // ReactionManager ya agrega "Byte:"; lo quitamos para no repetirlo.
+        if (message.startsWith("Byte: ")) {
+            message = message.substring(6);
+        }
+
+        game.batch.begin();
+
+        // Nombre del asistente.
+        fontSmall.setColor(
+            new Color(
+                0.25f,
+                0.95f,
+                1f,
+                1f
+            )
+        );
+
+        fontSmall.draw(
+            game.batch,
+            "BYTE",
+            boxX + 50f,
+            boxY + boxHeight - 18f
+        );
+
+        // Mensaje con ajuste automático de línea.
+        fontSmall.setColor(Color.WHITE);
+
+        fontSmall.draw(
+            game.batch,
+            message,
+            boxX + 18f,
+            boxY + 72f,
+            boxWidth - 36f,
+            com.badlogic.gdx.utils.Align.left,
+            true
+        );
+
+        game.batch.end();
+
+        fontSmall.getData().setScale(
+            originalSmallScale
+        );
+    }
+
     //getCPKColor
     private Color getCpkColor(AtomType atom) {
 
@@ -1201,30 +1461,122 @@ public class RunnerScreen implements Screen {
     // ── D-PAD IZQUIERDO ─────────────────────────────────────────
 
     private void drawDpad() {
-        float cx = dpadCX, cy = dpadCY;
+        float cx = dpadCX;
+        float cy = dpadCY;
+        float separation = 105f;
+
+        drawNeonDpadButton(
+            cx,
+            cy + separation,
+            btnUp,
+            "^"
+        );
+
+        drawNeonDpadButton(
+            cx,
+            cy - separation,
+            btnDown,
+            "v"
+        );
+
+        drawNeonDpadButton(
+            cx - separation,
+            cy,
+            btnLeft,
+            "<"
+        );
+
+        drawNeonDpadButton(
+            cx + separation,
+            cy,
+            btnRight,
+            ">"
+        );
+    } // Esta llave cierra drawDpad()
+
+
+    private void drawNeonDpadButton(
+        float x,
+        float y,
+        boolean pressed,
+        String symbol
+    ) {
+        float outerRadius = 49f;
+        float middleRadius = 43f;
+        float innerRadius = 36f;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(
+            GL20.GL_SRC_ALPHA,
+            GL20.GL_ONE_MINUS_SRC_ALPHA
+        );
 
         sr.begin(ShapeRenderer.ShapeType.Filled);
-        sr.setColor(COL_DPAD_BG);
-        sr.circle(cx, cy, DPAD_R + DPAD_BR + 10, 40);
 
-        drawBtn(cx, cy + DPAD_R, btnUp);
-        drawBtn(cx, cy - DPAD_R, btnDown);
-        drawBtn(cx - DPAD_R, cy, btnLeft);
-        drawBtn(cx + DPAD_R, cy, btnRight);
+        // Resplandor exterior.
+        sr.setColor(
+            0.05f,
+            0.65f,
+            1f,
+            pressed ? 0.55f : 0.28f
+        );
+        sr.circle(x, y, outerRadius, 32);
+
+        // Fondo individual transparente.
+        sr.setColor(
+            0.015f,
+            0.055f,
+            0.14f,
+            pressed ? 0.92f : 0.68f
+        );
+        sr.circle(x, y, middleRadius, 32);
+
+        // Centro.
+        if (pressed) {
+            sr.setColor(0.12f, 0.50f, 0.95f, 0.90f);
+        } else {
+            sr.setColor(0.03f, 0.10f, 0.24f, 0.72f);
+        }
+
+        sr.circle(x, y, innerRadius, 32);
         sr.end();
 
-        game.batch.begin();
-        fontBig.setColor(Color.WHITE);
-        drawC(fontBig, "^", cx,          cy + DPAD_R + 16);
-        drawC(fontBig, "v", cx,          cy - DPAD_R + 16);
-        drawC(fontBig, "<", cx - DPAD_R, cy + 16);
-        drawC(fontBig, ">", cx + DPAD_R, cy + 16);
-        game.batch.end();
-    }
+        // Bordes de neón.
+        sr.begin(ShapeRenderer.ShapeType.Line);
 
-    private void drawBtn(float cx, float cy, boolean pressed) {
-        sr.setColor(pressed ? COL_DPAD_PR : COL_DPAD_N);
-        sr.circle(cx, cy, DPAD_BR, 24);
+        if (pressed) {
+            sr.setColor(0.40f, 0.95f, 1f, 1f);
+        } else {
+            sr.setColor(0.05f, 0.78f, 1f, 0.95f);
+        }
+
+        sr.circle(x, y, middleRadius, 32);
+        sr.circle(x, y, innerRadius, 32);
+
+        sr.end();
+
+        // Símbolo.
+        float originalScale = fontBig.getData().scaleX;
+
+        fontBig.getData().setScale(
+            pressed ? 2.15f : 1.90f
+        );
+
+        game.batch.begin();
+
+        fontBig.setColor(Color.WHITE);
+        drawC(
+            fontBig,
+            symbol,
+            x,
+            y + 17f
+        );
+
+        game.batch.end();
+
+        fontBig.getData().setScale(originalScale);
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     // ── Textos flotantes ─────────────────────────────────────────
@@ -1232,7 +1584,7 @@ public class RunnerScreen implements Screen {
     private void drawFloatTexts(float delta) {
         for (int i = floatLife.size() - 1; i >= 0; i--) {
             float t = floatLife.get(i) - delta;
-            floatPos.get(i)[1] += 90f * delta;
+            floatPos.get(i)[1] += 140f * delta;
             if (t <= 0) {
                 floatLabels.remove(i); floatPos.remove(i); floatLife.remove(i);
             } else {
@@ -1248,6 +1600,124 @@ public class RunnerScreen implements Screen {
             font.draw(game.batch, floatLabels.get(i), p[0], p[1]);
         }
         game.batch.end();
+    }
+
+    private void spawnRunnerParticles(
+        float x,
+        float y,
+        Color color,
+        boolean contaminant
+    ) {
+        int particleCount =
+            contaminant ? 28 : 24;
+
+        for (int i = 0; i < particleCount; i++) {
+
+            float angle =
+                random.nextFloat()
+                    * (float) Math.PI
+                    * 2f;
+
+            float speed =
+                contaminant
+                    ? 160f + random.nextFloat() * 230f
+                    : 150f + random.nextFloat() * 210f;
+
+            float vx =
+                (float) Math.cos(angle) * speed;
+
+            float vy =
+                (float) Math.sin(angle) * speed;
+
+            if (contaminant) {
+                vy += 50f;
+            }
+
+            float life =
+                contaminant
+                     ?0.65f + random.nextFloat() * 0.45f
+                     :0.75f + random.nextFloat() * 0.50f;
+
+            float size =
+                contaminant
+                    ? 10f + random.nextFloat() * 13f
+                    : 8f + random.nextFloat() * 11f;
+
+            runnerParticles.add(
+                new RunnerParticle(
+                    x,
+                    y,
+                    vx,
+                    vy,
+                    life,
+                    size,
+                    color
+                )
+            );
+        }
+    }
+
+    private void updateAndDrawRunnerParticles(float delta) {
+
+        for (int i = runnerParticles.size() - 1; i >= 0; i--) {
+
+            RunnerParticle particle =
+                runnerParticles.get(i);
+
+            particle.life -= delta;
+
+            if (particle.life <= 0f) {
+                runnerParticles.remove(i);
+                continue;
+            }
+
+            particle.x += particle.vx * delta;
+            particle.y += particle.vy * delta;
+
+            particle.vy -= 220f * delta;
+
+            particle.vx *= 0.97f;
+        }
+
+        if (runnerParticles.isEmpty()) {
+            return;
+        }
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+
+        Gdx.gl.glBlendFunc(
+            GL20.GL_SRC_ALPHA,
+            GL20.GL_ONE_MINUS_SRC_ALPHA
+        );
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+
+        for (RunnerParticle particle : runnerParticles) {
+
+            float alpha =
+                Math.max(
+                    0f,
+                    particle.life / particle.maxLife
+                );
+
+            sr.setColor(
+                particle.color.r,
+                particle.color.g,
+                particle.color.b,
+                alpha
+            );
+
+            sr.circle(
+                particle.x,
+                particle.y,
+                Math.max(3f, particle.size * alpha),
+                12
+            );
+        }
+
+        sr.end();
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     // ── CONFETI ──────────────────────────────────────────────────
