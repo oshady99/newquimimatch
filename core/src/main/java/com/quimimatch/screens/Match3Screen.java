@@ -245,6 +245,12 @@ public class Match3Screen implements Screen {
     private void checkEndCondition() {
         GameSession gs = GameSession.get();
         if (gs.isVictory()) {
+            for (int i = 0; i < 7; i++) {
+                float px = boardOffsetX + (i + 0.5f) * (TILE + GAP);
+                float py = boardOffsetY + 3.5f * (TILE + GAP);
+                particles.addExplosion(px, py, i % 2 == 0 ? Color.CYAN : Color.GOLD, 16);
+                particles.addFlash(px, py, TILE, Color.CYAN);
+            }
             moleculePanel.show(gs.getConfig().moleculeName);
             showFloat("¡MOLECULA COMPLETA!");
             AudioManager.get().playVictory();

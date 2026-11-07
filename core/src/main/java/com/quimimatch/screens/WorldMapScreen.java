@@ -71,6 +71,7 @@ public class WorldMapScreen implements Screen {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         handleInput();
+        if (game.getScreen() != this) return;
         drawMap();
     }
 
@@ -110,6 +111,12 @@ public class WorldMapScreen implements Screen {
     private void checkTap(float tx, float ty) {
         float sw = Gdx.graphics.getWidth();
         float sh = Gdx.graphics.getHeight();
+
+        if (ty >= sh - 100) {
+            if (tx >= 20 && tx <= 180) game.setScreen(new MenuScreen(game));
+            else if (tx >= 195 && tx <= 375) game.setScreen(new ShopScreen(game));
+            return;
+        }
 
         for (int w = 0; w < WORLDS; w++) {
             for (int l = 0; l < LEVELS_PER_WORLD; l++) {
@@ -173,6 +180,17 @@ public class WorldMapScreen implements Screen {
         drawCentered(fontTitle, "QUIMIMATCH", sw / 2f, sh - 18);
         fontSmall.setColor(new Color(0.6f, 0.7f, 1f, 1f));
         drawCentered(fontSmall, "Elige tu nivel", sw / 2f, sh - 76);
+        game.batch.end();
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(0.12f, 0.35f, 0.46f, 1);
+        sr.rect(20, sh - 90, 160, 65);
+        sr.rect(195, sh - 90, 180, 65);
+        sr.end();
+        game.batch.begin();
+        fontSmall.setColor(Color.WHITE);
+        drawCentered(fontSmall, "MENU", 100, sh - 48);
+        drawCentered(fontSmall, "TIENDA", 285, sh - 48);
         game.batch.end();
 
         // ── Vidas ────────────────────────────────────────────────

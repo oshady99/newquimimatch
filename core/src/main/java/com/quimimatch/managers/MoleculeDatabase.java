@@ -42,17 +42,17 @@ public class MoleculeDatabase {
     static {
         add("H2O",      "Agua",             "Oxido",
             "💧", "Cubre el 71% de la Tierra y es esencial para toda vida conocida.",
-            "Liquida entre 0°C y 100°C",    "Disuelve casi todo: el solvente universal",
+            "Liquida entre 0 y 100 C aproximadamente a presion atmosferica",    "Disuelve muchas sustancias, pero no todas",
             "Beber, cocinar, higiene, industria");
 
         add("H2O2",     "Agua Oxigenada",   "Oxido",
             "🫧", "Las celulas la producen como arma para destruir bacterias invasoras.",
             "Liquida, inestable a temperatura alta", "Oxidante fuerte, libera O2 al descomponerse",
-            "Desinfectante heridas, blanqueador, cohetes");
+            "Blanqueo y procesos industriales controlados");
 
         add("NH3",      "Amoniaco",         "Base",
             "🌿", "El amoniaco sintetico alimenta a casi la mitad de la humanidad via fertilizantes.",
-            "Gas de olor penetrante, -33°C liquido", "Base fuerte, reacciona con acidos",
+            "Gas de olor penetrante, -33°C liquido", "Base debil en agua, reacciona con acidos",
             "Fertilizantes, limpiadores, refrigeracion");
 
         add("C2H2O",    "Acetaldehido",     "Organica",
@@ -61,7 +61,7 @@ public class MoleculeDatabase {
             "Fabricacion de plasticos, perfumes");
 
         add("NaCl",     "Sal de Mesa",      "Sal",
-            "🧂", "Los romanos pagaban a sus soldados con sal. De ahi viene la palabra salario.",
+            "🧂", "La sal de mesa forma cristales de iones sodio y cloruro, no moleculas aisladas.",
             "Solido cristalino, funde a 801°C",      "Ionico, conduce electricidad al disolverse",
             "Condimento, conservante, industria quimica");
 

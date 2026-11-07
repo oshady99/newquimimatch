@@ -9,7 +9,10 @@ import com.quimimatch.board.AtomType;
 public class SkinPalette {
 
     public static Color getColor(AtomType type) {
-        String skin = PlayerInventory.get().getActiveSkin();
+        return getColor(PlayerInventory.get().getActiveSkin(), type);
+    }
+
+    public static Color getColor(String skin, AtomType type) {
         switch (skin) {
             case "neon":     return getNeon(type);
             case "pastel":   return getPastel(type);

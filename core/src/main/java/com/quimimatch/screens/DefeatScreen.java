@@ -80,7 +80,7 @@ public class DefeatScreen implements Screen {
         game.batch.begin();
 
         fontBig.setColor(new Color(1f, 0.3f, 0.3f, 1f));
-        drawCentered(fontBig, "SIN MOVIMIENTOS", cx, cy + 220);
+        drawCentered(fontBig, "RETO NO COMPLETADO", cx, cy + 220);
 
         font.setColor(Color.WHITE);
         drawCentered(font, "Puntos: " + GameSession.get().getScore(), cx, cy + 150);
@@ -132,7 +132,7 @@ public class DefeatScreen implements Screen {
          && ty >= btnRetryY && ty <= btnRetryY + btnRetryH) {
             if (GameSession.get().hasLives()) {
                 GameSession.get().restartLevel();
-                game.setScreen(new Match3Screen(game));
+                game.setScreen(new RunnerScreen(game));
             }
         }
 

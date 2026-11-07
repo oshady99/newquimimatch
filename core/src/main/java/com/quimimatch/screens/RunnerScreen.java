@@ -33,6 +33,28 @@ import com.quimimatch.managers.RunnerDifficulty;
 public class RunnerScreen implements Screen {
 
     private final QuimiMatchGame game;
+    private float impactTimer = 0f;
+
+    private void triggerImpact() {
+        impactTimer = 0.42f;
+        if (Gdx.input.isPeripheralAvailable(com.badlogic.gdx.Input.Peripheral.Vibrator)) {
+            Gdx.input.vibrate(140);
+        }
+        float laneF = lane + (targetLane - lane) * easeInOut(laneT);
+        spawnRunnerParticles(SW * (0.15f + 0.35f * laneF), SH * 0.18f,
+            new Color(1f, 0.25f, 0.08f, 1f), true);
+    }
+
+    private void drawImpact() {
+        if (impactTimer <= 0f) return;
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(1f, 0.08f, 0.04f, 0.22f * impactTimer / 0.42f);
+        sr.rect(0, 0, SW, SH);
+        sr.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
     private ShapeRenderer sr;
     private BitmapFont font;
     private BitmapFont fontBig;
@@ -42,13 +64,13 @@ public class RunnerScreen implements Screen {
 
     private float SW, SH;
 
-    // ── Perspectiva ──────────────────────────────────────────────
+    // Perspectiva
     // El "horizonte" está en el centro de la pantalla
     // Los objetos empiezan pequeños al fondo y crecen al acercarse
     private static final float HORIZON_Y  = 0.58f; // fracción de SH
     private static final float VANISH_X   = 0.5f;  // fracción de SW (punto de fuga)
 
-    // ── Max (espalda al jugador) ─────────────────────────────────
+    //Max (espalda al jugador)
     private int   lane     = 1;
     private int   targetLane = 1;
     private float laneT    = 1f;   // interpolación 0→1 entre carriles
@@ -58,7 +80,7 @@ public class RunnerScreen implements Screen {
     private boolean jumping   = false;
     private float   jumpT     = 0f; // 0→1→0 arco de salto
 
-    // ── Obstáculos 3D ────────────────────────────────────────────
+    //Obstáculos 3D
     private static class Obj3D {
         float z;        // profundidad: 1.0=horizonte, 0.0=pantalla
         int   lane;
@@ -247,8 +269,8 @@ public class RunnerScreen implements Screen {
         reactionManager = new ReactionManager(equationTarget);
         missionIntro = new MissionIntroOverlay(specialCompound);
 
-        dpadCX = 220f;
-        dpadCY = 200f;
+        dpadCX = 245f;
+        dpadCY = 230f;
     }
     @Override public void show() {}
 
@@ -298,6 +320,7 @@ public class RunnerScreen implements Screen {
     // ── UPDATE ───────────────────────────────────────────────────
 
     private void updateRunner(float delta) {
+        impactTimer = Math.max(0f, impactTimer - delta);
         runTimer  += delta;
         reactionManager.update(delta);
 
@@ -439,6 +462,7 @@ public class RunnerScreen implements Screen {
                             break;
 
                         case INCORRECT:
+                            triggerImpact();
                             AudioManager.get().playObstacle();
                             spawnRunnerParticles(
                                 sp[0],
@@ -495,6 +519,7 @@ public class RunnerScreen implements Screen {
                     if (!evaded) {
                         AudioManager.get().playObstacle();
                         GameSession.get().loseLife();
+                        triggerImpact();
 
                         floatLabels.add("¡VIDA -1!");
 
@@ -601,15 +626,15 @@ public class RunnerScreen implements Screen {
             if (!Gdx.input.isTouched(p)) continue;
             float tx = Gdx.input.getX(p);
             float ty = SH - Gdx.input.getY(p);
-            float dx = tx - dpadCX, dy = ty - dpadCY;
-            float dist = (float)Math.sqrt(dx*dx + dy*dy);
-            if (dist < DPAD_R * 1.6f) {
-                if (Math.abs(dy) > Math.abs(dx)) {
-                    if (dy >  15) btnUp   = true;
-                    if (dy < -15) btnDown = true;
-                } else {
-                    if (dx < -15) btnLeft  = true;
-                    if (dx >  15) btnRight = true;
+            float[][] centers = {{dpadCX, dpadCY + 140}, {dpadCX, dpadCY - 140},
+                {dpadCX - 140, dpadCY}, {dpadCX + 140, dpadCY}};
+            for (int i = 0; i < centers.length; i++) {
+                float dx = tx - centers[i][0], dy = ty - centers[i][1];
+                if (dx * dx + dy * dy <= 75f * 75f) {
+                    if (i == 0) btnUp = true;
+                    else if (i == 1) btnDown = true;
+                    else if (i == 2) btnLeft = true;
+                    else btnRight = true;
                 }
             }
         }
@@ -645,6 +670,7 @@ public class RunnerScreen implements Screen {
         }
 
         drawMax();
+        drawImpact();
     }
 
     private void drawObject(Obj3D o) {
@@ -678,8 +704,15 @@ public class RunnerScreen implements Screen {
             Texture obsTex = o.isHigh ? assets.obsHigh : assets.obsLow;
             if (obsTex != null) {
                 game.batch.begin();
-                float w = obsTex.getWidth() * scale * 1.5f; // Reducido más (era 2.0)
-                float h = obsTex.getHeight() * scale * 1.5f;
+                // Obstáculos proporcionados a Max y a la perspectiva
+                // Escala independiente según el tipo de obstáculo
+                float targetWidth = (o.isHigh ? 420f : 500f) * scale;
+
+                float aspectRatio =
+                    (float) obsTex.getWidth() / obsTex.getHeight();
+
+                float w = targetWidth;
+                float h = w / aspectRatio;
                 game.batch.draw(obsTex, cx - w / 2f, cy, w, h);
                 game.batch.end();
             } else {
@@ -720,6 +753,7 @@ public class RunnerScreen implements Screen {
         float nearX0 = SW * 0.15f;
         float nearX2 = SW * 0.85f;
         float laneNearX = nearX0 + (nearX2 - nearX0) * (laneF / 2f);
+        laneNearX += (float)Math.sin(impactTimer * 95f) * 22f * (impactTimer / 0.42f);
 
         float bob    = jumping ? 0f : (float)Math.sin(bobTimer) * 6f;
         float jumpOff = jumping ? (float)Math.sin(jumpT * Math.PI) * 160f : 0f;
@@ -751,7 +785,9 @@ public class RunnerScreen implements Screen {
             float scale = 1.8f; // Max más grande
             float w = currentFrame.getRegionWidth() * scale;
             float h = currentFrame.getRegionHeight() * scale;
+            if (impactTimer > 0f) game.batch.setColor(1f, 0.35f, 0.3f, 1f);
             game.batch.draw(currentFrame, laneNearX - w / 2f, py, w, h);
+            game.batch.setColor(Color.WHITE);
             game.batch.end();
         } else {
             // Fallback a dibujo con formas si no hay assets
@@ -1463,7 +1499,7 @@ public class RunnerScreen implements Screen {
     private void drawDpad() {
         float cx = dpadCX;
         float cy = dpadCY;
-        float separation = 105f;
+        float separation = 140f;
 
         drawNeonDpadButton(
             cx,
@@ -1501,9 +1537,9 @@ public class RunnerScreen implements Screen {
         boolean pressed,
         String symbol
     ) {
-        float outerRadius = 49f;
-        float middleRadius = 43f;
-        float innerRadius = 36f;
+        float outerRadius = 69f;
+        float middleRadius = 60f;
+        float innerRadius = 50f;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(
@@ -1559,7 +1595,7 @@ public class RunnerScreen implements Screen {
         float originalScale = fontBig.getData().scaleX;
 
         fontBig.getData().setScale(
-            pressed ? 2.15f : 1.90f
+            pressed ? 3.0f : 2.66f
         );
 
         game.batch.begin();
@@ -1824,11 +1860,11 @@ public class RunnerScreen implements Screen {
 
         game.batch.begin();
         fontSmall.setColor(new Color(0.7f, 0.8f, 1f, 1f));
-        drawC(fontSmall, "Comenzando nivel...", cx, cy - 238);
+        drawC(fontSmall, "Ingresando al laboratorio molecular...", cx, cy - 238);
         game.batch.end();
 
         if (summaryTimer <= 0) {
-            game.setScreen(new Match3Screen(game));
+            game.setScreen(new MolecularLabScreen(game, new java.util.LinkedHashMap<>(collected)));
         }
     }
 
